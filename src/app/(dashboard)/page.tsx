@@ -7,6 +7,7 @@ import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { TaskPipeline } from "@/components/dashboard/task-pipeline";
 import { SystemHealth } from "@/components/dashboard/system-health";
 import { KnowledgeCard } from "@/components/dashboard/knowledge-card";
+import { UsageCard } from "@/components/dashboard/usage-card";
 
 export default function DashboardPage() {
   return (
@@ -26,6 +27,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <RecentActivity />
         <div className="space-y-4">
+          <UsageCard />
           <KnowledgeCard />
           <SystemHealth />
         </div>
