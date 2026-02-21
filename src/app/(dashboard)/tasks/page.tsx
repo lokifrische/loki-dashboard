@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Circle, Loader2, CheckCircle2, AlertCircle, Trash2, GripVertical, Plus } from "lucide-react";
+import { Circle, Loader2, CheckCircle2, AlertCircle, Trash2, GripVertical, Plus, ChevronDown, ChevronRight } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -31,8 +31,6 @@ const statusConfig = {
   blocked: { icon: AlertCircle, color: "text-red-500", badge: "error" as const },
 };
 
-type StatusFilter = "all" | "queued" | "in-progress" | "completed" | "blocked";
-
 function SortableTaskRow({ task, onToggle, onDelete }: {
   task: TaskItem;
   onToggle: (id: string, status: TaskItem["status"]) => void;
@@ -53,32 +51,22 @@ function SortableTaskRow({ task, onToggle, onDelete }: {
       <button {...attributes} {...listeners} className="cursor-grab active:cursor-grabbing text-muted-foreground/30 hover:text-muted-foreground shrink-0 touch-none">
         <GripVertical className="h-4 w-4" />
       </button>
-
       <button onClick={() => onToggle(task.id, task.status)} className="shrink-0">
-        <Icon
-          className={`h-4 w-4 ${config.color} ${task.status === "in-progress" ? "animate-spin" : ""} hover:scale-110 transition-transform`}
-        />
+        <Icon className={`h-4 w-4 ${config.color} ${task.status === "in-progress" ? "animate-spin" : ""} hover:scale-110 transition-transform`} />
       </button>
-
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium ${task.status === "completed" ? "line-through text-muted-foreground" : "text-foreground"}`}>
           {task.title}
         </p>
         <div className="flex items-center gap-2 mt-1 flex-wrap">
           {task.tags?.map((tag) => (
-            <span key={tag} className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">
-              {tag}
-            </span>
+            <span key={tag} className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">{tag}</span>
           ))}
         </div>
       </div>
-
       <div className="flex items-center gap-2 shrink-0">
         <Badge variant={config.badge}>{task.status.replace("-", " ")}</Badge>
-        <button
-          onClick={() => onDelete(task.id)}
-          className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 p-1"
-        >
+        <button onClick={() => onDelete(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 p-1">
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
@@ -88,11 +76,11 @@ function SortableTaskRow({ task, onToggle, onDelete }: {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState<TaskItem[]>([]);
-  const [filter, setFilter] = useState<StatusFilter>("all");
   const [seeded, setSeeded] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newPriority, setNewPriority] = useState<TaskItem["priority"]>("medium");
   const [adding, setAdding] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -101,37 +89,22 @@ export default function TasksPage() {
 
   useEffect(() => {
     const unsub = subscribeTasks((incoming) => {
-      if (!seeded) {
-        seedTasksIfEmpty(incoming.length);
-        setSeeded(true);
-      }
+      if (!seeded) { seedTasksIfEmpty(incoming.length); setSeeded(true); }
       setTasks(incoming);
     });
     return unsub;
   }, [seeded]);
 
-  const filtered = filter === "all" ? tasks : tasks.filter((t) => t.status === filter);
-  const counts = {
-    all: tasks.length,
-    queued: tasks.filter((t) => t.status === "queued").length,
-    "in-progress": tasks.filter((t) => t.status === "in-progress").length,
-    completed: tasks.filter((t) => t.status === "completed").length,
-    blocked: tasks.filter((t) => t.status === "blocked").length,
-  };
+  const active = tasks.filter((t) => t.status !== "completed");
+  const completed = tasks.filter((t) => t.status === "completed");
 
   const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (!over || active.id === over.id) return;
-
-    // Only reorder within the filtered view — map back to full list order
-    const oldIndex = filtered.findIndex((t) => t.id === active.id);
-    const newIndex = filtered.findIndex((t) => t.id === over.id);
-    const reordered = arrayMove(filtered, oldIndex, newIndex);
-    // Optimistic: update full task list preserving non-filtered items
-    const reorderedIds = reordered.map((t) => t.id);
-    const filteredSet = new Set(reorderedIds);
-    const others = tasks.filter((t) => !filteredSet.has(t.id));
-    setTasks([...reordered, ...others]);
+    const { active: dragActive, over } = event;
+    if (!over || dragActive.id === over.id) return;
+    const oldIndex = active.findIndex((t) => t.id === dragActive.id);
+    const newIndex = active.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(active, oldIndex, newIndex);
+    setTasks([...reordered, ...completed]);
     reorderTasks(reordered.map((t) => t.id));
   };
 
@@ -147,7 +120,9 @@ export default function TasksPage() {
     <div className="space-y-6 max-w-4xl mx-auto">
       <div>
         <h1 className="text-lg font-semibold text-foreground">Task Pipeline</h1>
-        <p className="text-sm text-muted-foreground mt-1">Real-time tasks — drag to reorder, click ○ to complete, hover to delete</p>
+        <p className="text-sm text-muted-foreground mt-1">
+          {active.length} active · {completed.length} completed — drag to reorder, click ○ to complete
+        </p>
       </div>
 
       {/* Add task */}
@@ -180,42 +155,61 @@ export default function TasksPage() {
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-1 flex-wrap">
-        {(["all", "in-progress", "queued", "completed", "blocked"] as StatusFilter[]).map((s) => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
-              filter === s
-                ? "bg-accent text-accent-foreground"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
-            }`}
-          >
-            {s === "all" ? "All" : s.charAt(0).toUpperCase() + s.slice(1).replace("-", " ")}
-            <span className="ml-1.5 text-muted-foreground">{counts[s]}</span>
-          </button>
-        ))}
-      </div>
-
-      {/* Task list */}
+      {/* Active tasks */}
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={filtered.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={active.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="space-y-2">
-            {filtered.map((task) => (
-              <SortableTaskRow
-                key={task.id}
-                task={task}
-                onToggle={toggleTaskComplete}
-                onDelete={deleteTask}
-              />
-            ))}
-            {filtered.length === 0 && (
-              <p className="text-sm text-muted-foreground text-center py-8">No tasks here. Add one above.</p>
+            {active.length === 0 && (
+              <p className="text-sm text-muted-foreground text-center py-8">No active tasks — you&apos;re clear 🎉</p>
             )}
+            {active.map((task) => (
+              <SortableTaskRow key={task.id} task={task} onToggle={toggleTaskComplete} onDelete={deleteTask} />
+            ))}
           </div>
         </SortableContext>
       </DndContext>
+
+      {/* Completed section */}
+      {completed.length > 0 && (
+        <div className="pt-2">
+          <button
+            onClick={() => setShowCompleted((p) => !p)}
+            className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors mb-3"
+          >
+            {showCompleted ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <span className="font-medium">{completed.length} Completed</span>
+          </button>
+          {showCompleted && (
+            <div className="space-y-2 opacity-60">
+              {completed.map((task) => (
+                <Card key={task.id} className="flex items-center gap-4 group border-border/50">
+                  <GripVertical className="h-4 w-4 text-muted-foreground/20" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm line-through text-muted-foreground truncate">{task.title}</p>
+                    <div className="flex gap-2 mt-1">
+                      {task.tags?.map((tag) => (
+                        <span key={tag} className="text-[10px] text-muted-foreground bg-muted rounded px-1.5 py-0.5">{tag}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => toggleTaskComplete(task.id, task.status)}
+                      className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      Reopen
+                    </button>
+                    <button onClick={() => deleteTask(task.id)} className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-red-500 p-1">
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
